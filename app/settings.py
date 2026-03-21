@@ -42,6 +42,12 @@ class EpicSettings(AgentConfig):
         description="SiliconFlow API Key",
     )
 
+    # 覆盖父类的 GEMINI_API_KEY，使其变为可选（我们使用 SiliconFlow）
+    GEMINI_API_KEY: SecretStr | None = Field(
+        default=SecretStr(""),
+        description="Gemini API Key（本项目使用 SiliconFlow，此字段无需配置）",
+    )
+
     # API 基础地址
     SILICONFLOW_BASE_URL: str = Field(
         default=os.getenv("SILICONFLOW_BASE_URL", "https://api.siliconflow.cn/v1"),
