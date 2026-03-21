@@ -221,15 +221,17 @@ deploy_service() {
 
 # 显示完成信息
 show_complete() {
-    SERVER_IP=$(curl -s --connect-timeout 3 ifconfig.me 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}')
+    # 只显示公网 IPv4 地址
+    PUBLIC_IP=$(curl -4 -s --connect-timeout 3 ifconfig.me 2>/dev/null)
 
     echo ""
     echo -e "${GREEN}部署完成！${NC}"
     echo ""
     echo -e "${CYAN}访问地址:${NC}"
-    echo -e "  本地: ${YELLOW}http://localhost:18000${NC}"
-    if [ -n "$SERVER_IP" ]; then
-        echo -e "  外网: ${YELLOW}http://$SERVER_IP:18000${NC}"
+    if [[ -n "$PUBLIC_IP" && "$PUBLIC_IP" != "127.0.0.1" ]]; then
+        echo -e "  公网: ${YELLOW}http://$PUBLIC_IP:18000${NC}"
+    else
+        echo -e "  公网: ${YELLOW}未检测到公网 IPv4，请检查服务器网络${NC}"
     fi
     echo ""
     echo -e "${CYAN}常用命令:${NC}"
