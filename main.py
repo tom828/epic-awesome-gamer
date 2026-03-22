@@ -317,11 +317,20 @@ async def get_system_stats():
     # 队列中等待的任务数
     queue_length = r.llen("task_queue")
 
+    # 正在处理中的任务数（扫描 status:* keys，排除已完成的）
+    # 已完成状态：🎉（成功）、❌（失败）、✅ 验证通过
+    processing_count = 0
+    for key in r.scan_iter("status:*"):
+        status = r.get(key)
+        if status and not status.startswith("🎉") and not status.startswith("❌") and not status.startswith("✅ 验证通过"):
+            processing_count += 1
+
     return {
         "total_accounts": total_accounts,
         "today_claims": today_claims,
         "total_claims": total_claims,
         "queue_length": queue_length,
+        "processing_count": processing_count,
         "server_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
 

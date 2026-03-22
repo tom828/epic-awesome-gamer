@@ -686,7 +686,9 @@
                 document.getElementById('stat-accounts').textContent = res.data.total_accounts;
                 document.getElementById('stat-today').textContent = res.data.today_claims;
                 document.getElementById('stat-total').textContent = res.data.total_claims;
-                document.getElementById('stat-queue').textContent = res.data.queue_length;
+                // 队列任务数 = 等待中 + 处理中
+                const queueTotal = (res.data.queue_length || 0) + (res.data.processing_count || 0);
+                document.getElementById('stat-queue').textContent = queueTotal;
             } catch (e) { console.error('Failed to fetch stats:', e); }
         }
 
