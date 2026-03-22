@@ -291,10 +291,14 @@ def run_task(task_data):
             if "Challenge success" in line or "验证码通过" in line:
                 r.set(f"status:{email}", "✅ 验证码通过", ex=3600)
 
-            if "Already in the library" in line:
+            if "Already in the library" in line or "游戏已在库中" in line:
                 is_already_owned = True
-                has_critical_error = False
+                has_critical_error = False  # 游戏已在库中，清除错误标记
                 r.set(f"status:{email}", "ℹ️ 游戏已在库中", ex=3600)
+
+            # 游戏领取成功，清除错误标记
+            if "任务完成" in line or "领取成功" in line:
+                has_critical_error = False
 
             if "Authentication completed" in line or "already logged in" in line:
                 r.set(f"status:{email}", "✅ 登录成功", ex=3600)

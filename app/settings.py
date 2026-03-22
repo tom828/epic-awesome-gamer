@@ -104,6 +104,13 @@ class EpicSettings(AgentConfig):
     EPIC_PASSWORD: SecretStr = Field(default_factory=lambda: os.getenv("EPIC_PASSWORD"))
     DISABLE_BEZIER_TRAJECTORY: bool = Field(default=True)
 
+    # === hcaptcha-challenger 超时配置 ===
+    # 验证码响应超时（秒）
+    RESPONSE_TIMEOUT: float = Field(
+        default=60.0,
+        description="验证码响应超时时间（秒）"
+    )
+
     # 禁用 hcaptcha 文件保存（使用 /tmp 临时目录）
     cache_dir: Path = Path("/tmp/hcaptcha/.cache")
     challenge_dir: Path = Path("/tmp/hcaptcha/.challenge")
@@ -386,6 +393,20 @@ JSON Schema:
         # ==========================================
         file_cache = {}
 
+        # ==========================================
+        # 验证码模型切换机制
+        # ==========================================
+        # 跟踪验证码调用状态，实现智能模型切换
+        captcha_call_state = {
+            'call_count': 0,          # 当前会话验证码调用次数
+            'last_call_time': 0,      # 上次调用时间戳
+            'use_fallback': False,    # 是否应该使用备用模型
+            'success_count': 0,       # 成功次数
+            'failure_count': 0,       # 失败次数（通过调用频率推断）
+        }
+        CAPTCHA_FAILURE_THRESHOLD = 2  # 连续调用超过此次数后切换备用模型
+        CAPTCHA_TIME_WINDOW = 60       # 时间窗口（秒），超过此时间重置计数
+
         async def patched_upload(self_files, file, **kwargs):
             """将文件内容存储到内存缓存，返回伪造的文件 ID"""
             if hasattr(file, 'read'):
@@ -450,8 +471,31 @@ JSON Schema:
                 # 判断任务类型并选择合适的模型
                 is_captcha_task = has_images or has_cached_files
 
+                # 获取当前时间戳
+                import time
+                current_time = time.time()
+
                 if is_captcha_task:
-                    selected_model = settings.CAPTCHA_MODEL
+                    # 检查是否需要重置计数器（超过时间窗口）
+                    if current_time - captcha_call_state['last_call_time'] > CAPTCHA_TIME_WINDOW:
+                        captcha_call_state['call_count'] = 0
+                        captcha_call_state['use_fallback'] = False
+                        logger.debug("🔄 验证码计数器已重置（超过时间窗口）")
+
+                    # 更新调用计数
+                    captcha_call_state['call_count'] += 1
+                    captcha_call_state['last_call_time'] = current_time
+
+                    # 判断是否应该使用备用模型
+                    # 当连续调用次数超过阈值时，切换到备用模型
+                    if captcha_call_state['call_count'] > CAPTCHA_FAILURE_THRESHOLD:
+                        captcha_call_state['use_fallback'] = True
+                        logger.info(f"🔄 验证码重试次数过多（{captcha_call_state['call_count']}次），切换到备用模型")
+                        selected_model = settings.CAPTCHA_MODEL_FALLBACK
+                    else:
+                        selected_model = settings.CAPTCHA_MODEL
+
+                    logger.debug(f"🎯 验证码调用 #{captcha_call_state['call_count']} | 模型: {selected_model}")
                 else:
                     selected_model = settings.PRIMARY_MODEL
 

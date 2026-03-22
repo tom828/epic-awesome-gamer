@@ -8,12 +8,15 @@
 - 中文显示
 
 文件日志策略：
-- 保留所有详细日志用于调试
-- 最大 10MB，保留 7 天
+- 按日期分类存储，方便查找和清理
+- 文件名格式：runtime-2026-03-22.log / error-2026-03-22.log
+- 保留 7 天
 """
 from __future__ import annotations
 import os
 import sys
+from pathlib import Path
+from datetime import datetime
 from zoneinfo import ZoneInfo
 from loguru import logger
 
@@ -110,7 +113,7 @@ def init_log(**sink_channel):
     初始化日志系统
 
     控制台：精简输出，只显示关键信息
-    文件：完整记录所有日志，最大 10MB，保留 7 天
+    文件：按日期分类存储，保留 7 天
     """
     logger.remove()
 
@@ -122,24 +125,40 @@ def init_log(**sink_channel):
         format="<green>{time:MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <level>{message}</level>",
     )
 
-    # 错误日志文件：记录所有 ERROR，最大 10MB，保留 7 天
+    # 错误日志文件：按日期存储，格式 error-2026-03-22.log
     if sink_channel.get("error"):
+        error_path = Path(sink_channel.get("error"))
+        log_dir = error_path.parent
+        log_dir.mkdir(parents=True, exist_ok=True)
+
+        # 使用日期作为文件名后缀
+        date_str = datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d")
+        error_log_file = log_dir / f"error-{date_str}.log"
+
         logger.add(
-            sink=sink_channel.get("error"),
+            sink=str(error_log_file),
             level="ERROR",
-            rotation="10 MB",
+            rotation="00:00",  # 每天午夜轮转
             filter=timezone_filter,
             retention="7 days",
             format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {message}",
             encoding="utf-8",
         )
 
-    # 运行时日志文件：记录所有级别，最大 10MB，保留 7 天
+    # 运行时日志文件：按日期存储，格式 runtime-2026-03-22.log
     if sink_channel.get("runtime"):
+        runtime_path = Path(sink_channel.get("runtime"))
+        log_dir = runtime_path.parent
+        log_dir.mkdir(parents=True, exist_ok=True)
+
+        # 使用日期作为文件名后缀
+        date_str = datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d")
+        runtime_log_file = log_dir / f"runtime-{date_str}.log"
+
         logger.add(
-            sink=sink_channel.get("runtime"),
+            sink=str(runtime_log_file),
             level="DEBUG",
-            rotation="10 MB",
+            rotation="00:00",  # 每天午夜轮转
             filter=timezone_filter,
             retention="7 days",
             format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} | {message}",

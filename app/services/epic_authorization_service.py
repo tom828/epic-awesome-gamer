@@ -40,13 +40,25 @@ class EpicAuthorization:
         with suppress(Exception):
             result = await r.json()
 
-            if "/id/api/login" in r.url and result.get("errorCode"):
-                # 记录错误码并通知登录失败
-                self._login_error_code = result.get("errorCode")
-                error_msg = result.get("errorMessage", "未知错误")
-                logger.error(f"❌ 登录失败: {error_msg}")
-                # 放入失败信号，中断等待
-                self._is_login_success_signal.put_nowait({"error": True, "code": self._login_error_code})
+            # 记录所有 POST 响应的 URL，便于调试
+            logger.debug(f"📡 API 响应: {r.url} | 状态码: {r.status}")
+
+            if "/id/api/login" in r.url:
+                # 记录完整的登录 API 响应
+                logger.debug(f"🔍 登录 API 完整响应: {json.dumps(result, ensure_ascii=False, indent=2)}")
+                if result.get("errorCode"):
+                    # 记录错误码并通知登录失败
+                    self._login_error_code = result.get("errorCode")
+                    error_msg = result.get("errorMessage", "未知错误")
+                    # 记录完整的错误信息
+                    logger.error(f"❌ 登录失败: errorCode={self._login_error_code}, message={error_msg}")
+                    logger.error(f"❌ 完整错误响应: {json.dumps(result, ensure_ascii=False)}")
+                    # 放入失败信号，中断等待
+                    self._is_login_success_signal.put_nowait({"error": True, "code": self._login_error_code, "full_response": result})
+                else:
+                    # 登录成功，记录 accountId
+                    if result.get("accountId"):
+                        logger.success(f"✅ 登录 API 返回成功: accountId={result.get('accountId')}")
             elif "/id/api/analytics" in r.url and result.get("accountId"):
                 self._is_login_success_signal.put_nowait(result)
             elif "/account/v2/refresh-csrf" in r.url and result.get("success", False) is True:
@@ -153,9 +165,9 @@ class EpicAuthorization:
             except asyncio.CancelledError:
                 pass
 
-            # 第二阶段：继续等待验证码处理后的结果（最多再等 45 秒）
+            # 第二阶段：继续等待验证码处理后的结果（最多再等 60 秒）
             try:
-                result = await asyncio.wait_for(self._is_login_success_signal.get(), timeout=45)
+                result = await asyncio.wait_for(self._is_login_success_signal.get(), timeout=60)
 
                 if result.get("error"):
                     error_code = result.get("code", "")

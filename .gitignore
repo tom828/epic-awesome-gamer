@@ -21,6 +21,7 @@ data/images/*.png
 !data/images/.gitkeep
 data/logs/
 data/runtime/
+data/captcha_debug/
 
 # 环境变量
 .env
