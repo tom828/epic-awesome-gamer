@@ -195,6 +195,84 @@ LOG_TRANSLATIONS = {
     "errorMessage": "错误信息",
 }
 
+# ============================================================
+# 🔥 错误类型映射
+# 将 ErrorType 映射为用户友好的中文提示和操作建议
+# ============================================================
+ERROR_TYPE_MESSAGES = {
+    # 成功
+    "success": {
+        "status": "✅ 操作成功",
+        "hint": None,  # 无需额外提示
+    },
+    # 账号或密码错误
+    "invalid_credentials": {
+        "status": "❌ 密码错误",
+        "hint": "请检查密码后重新托管",
+        "nuke": True,  # 需要删除账号
+    },
+    # 账号被锁定
+    "account_locked": {
+        "status": "❌ 账号被锁定",
+        "hint": "请登录 Epic 官网解锁账号",
+        "nuke": True,
+    },
+    # EULA 协议处理失败
+    "eula_failed": {
+        "status": "⚠️ 需要手动接受协议",
+        "hint": "请登录 Epic 官网同意服务条款后重新托管",
+        "nuke": False,  # 不删除账号，保留 Cookie
+    },
+    # 验证码识别失败
+    "captcha_failed": {
+        "status": "⚠️ 验证码识别困难",
+        "hint": "请稍后重试",
+        "nuke": False,
+    },
+    # 登录超时
+    "login_timeout": {
+        "status": "⚠️ 登录超时",
+        "hint": "网络波动，请稍后重试",
+        "nuke": False,
+    },
+    # 网络超时
+    "network_timeout": {
+        "status": "⚠️ 网络连接超时",
+        "hint": "Epic 服务可能不可用，请稍后重试",
+        "nuke": False,
+    },
+    # Cookie 无效
+    "cookie_invalid": {
+        "status": "❌ 登录已过期",
+        "hint": "请重新托管账号",
+        "nuke": True,
+    },
+    # 未知错误
+    "unknown": {
+        "status": "❌ 未知错误",
+        "hint": "请联系管理员查看日志",
+        "nuke": False,
+    },
+    # ===== 游戏收集相关错误 =====
+    # 所有游戏已在库中（这是成功状态）
+    "all_owned": {
+        "status": "✅ 所有游戏已在库中",
+        "hint": None,
+    },
+    # Cookie 无效（游戏收集阶段）
+    "cookie_invalid": {
+        "status": "❌ 登录已过期",
+        "hint": "请重新托管账号",
+        "nuke": True,
+    },
+    # 未知错误（游戏收集阶段）
+    "unknown_error": {
+        "status": "❌ 游戏领取失败",
+        "hint": "请稍后重试或联系管理员",
+        "nuke": False,
+    },
+}
+
 def translate_log(line):
     """汉化关键日志消息"""
     for en, zh in LOG_TRANSLATIONS.items():
@@ -235,6 +313,9 @@ def run_task(task_data):
     is_fatal_failure = False
     is_already_owned = False
 
+    # 🔥 新增：记录最终的错误类型
+    final_error_type = None
+
     try:
         process = subprocess.Popen(
             cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -258,6 +339,68 @@ def run_task(task_data):
 
             print(f"[{email}] {line}")
 
+            # ============================================================
+            # 🔥 新增：解析错误类型（格式: ❌ ERROR_TYPE:xxx）
+            # ============================================================
+            if "ERROR_TYPE:" in line:
+                match = re.search(r"ERROR_TYPE:(\w+)", line)
+                if match:
+                    error_type = match.group(1)
+                    final_error_type = error_type
+                    print(f"🔍 检测到错误类型: {error_type}")
+
+                    # 根据错误类型设置状态
+                    if error_type in ERROR_TYPE_MESSAGES:
+                        error_info = ERROR_TYPE_MESSAGES[error_type]
+                        r.set(f"status:{email}", error_info["status"], ex=3600)
+
+                        # 设置错误提示，供前端弹窗使用
+                        if error_info.get("hint"):
+                            r.set(f"hint:{email}", error_info["hint"], ex=3600)
+
+                        # 如果需要删除账号
+                        if error_info.get("nuke"):
+                            is_fatal_failure = True
+
+                        # 对于 EULA 失败等非致命错误，设置特殊结果
+                        r.set(f"result:{email}", f"error_{error_type}", ex=3600)
+                    continue
+
+            # 解析最终错误类型（格式: ❌ FINAL_ERROR:xxx）
+            if "FINAL_ERROR:" in line:
+                match = re.search(r"FINAL_ERROR:(\w+)", line)
+                if match:
+                    final_error_type = match.group(1)
+                    print(f"🔍 最终错误类型: {final_error_type}")
+                continue
+
+            # ============================================================
+            # 🔥 新增：解析游戏收集错误（格式: ❌ GAME_ERROR:xxx）
+            # ============================================================
+            if "GAME_ERROR:" in line:
+                match = re.search(r"GAME_ERROR:(\w+)", line)
+                if match:
+                    game_error = match.group(1)
+                    final_error_type = game_error
+                    print(f"🎮 检测到游戏收集错误: {game_error}")
+
+                    # 根据错误类型设置状态
+                    if game_error in ERROR_TYPE_MESSAGES:
+                        error_info = ERROR_TYPE_MESSAGES[game_error]
+                        r.set(f"status:{email}", error_info["status"], ex=3600)
+
+                        # 设置错误提示，供前端弹窗使用
+                        if error_info.get("hint"):
+                            r.set(f"hint:{email}", error_info["hint"], ex=3600)
+
+                        # 如果需要删除账号
+                        if error_info.get("nuke"):
+                            is_fatal_failure = True
+
+                        # 设置结果
+                        r.set(f"result:{email}", f"game_error_{game_error}", ex=3600)
+                    continue
+
             # 🛑 致命错误 A: 无法获取 Cookie
             if "context cookies is not available" in line:
                 r.set(f"status:{email}", "❌ 登录失败：无效账号", ex=300)
@@ -267,7 +410,7 @@ def run_task(task_data):
                 nuke_account_immediately(email)
                 return
 
-            # 🛑 致命错误 B: 密码错误
+            # 🛑 致命错误 B: 密码错误（兼容旧日志格式）
             if "invalid_account_credentials" in line or "账号或密码错误" in line:
                 r.set(f"status:{email}", "❌ 密码错误", ex=300)
                 r.set(f"result:{email}", "fail", ex=3600)
@@ -300,7 +443,7 @@ def run_task(task_data):
             if "任务完成" in line or "领取成功" in line:
                 has_critical_error = False
 
-            if "Authentication completed" in line or "already logged in" in line:
+            if "Authentication completed" in line or "already logged in" in line or "Epic Games 已登录" in line:
                 r.set(f"status:{email}", "✅ 登录成功", ex=3600)
                 is_login_success = True
 
@@ -315,8 +458,18 @@ def run_task(task_data):
                 except: pass
 
             if "Free games collection completed" in line:
+                # ============================================================
+                # 🔥 修改：根据错误类型决定后续处理
+                # ============================================================
                 if is_fatal_failure:
                     nuke_account_immediately(email)
+                elif final_error_type and final_error_type in ERROR_TYPE_MESSAGES:
+                    # 有明确的错误类型，使用对应的处理
+                    error_info = ERROR_TYPE_MESSAGES[final_error_type]
+                    r.set(f"status:{email}", error_info["status"], ex=3600)
+                    if error_info.get("hint"):
+                        r.set(f"hint:{email}", error_info["hint"], ex=3600)
+                    # 不设置 result，让前端根据 error_xxx 结果展示弹窗
                 elif has_critical_error and not is_already_owned:
                     r.set(f"status:{email}", "❌ 任务异常结束", ex=3600)
                     r.set(f"result:{email}", "fail", ex=3600)

@@ -583,6 +583,39 @@
             </div>
         </div>
 
+        <!-- ============================================================
+             🔥 错误提示弹窗
+             用于显示需要用户手动操作的错误（如 EULA 失败）
+             ============================================================ -->
+        <div id="error-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm hidden">
+            <div class="bg-slate-900 border border-slate-700 p-6 rounded-2xl shadow-2xl max-w-md w-full text-center modal-enter relative mx-4">
+                <div id="error-modal-icon" class="w-16 h-16 bg-amber-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <span class="text-3xl">⚠️</span>
+                </div>
+                <h3 id="error-modal-title" class="text-xl font-bold text-white mb-2">需要您帮忙操作一下</h3>
+                <div id="error-modal-content" class="bg-slate-800 rounded-xl p-4 mb-4 text-left">
+                    <p id="error-modal-desc" class="text-slate-300 text-sm leading-relaxed">
+                        这个账号需要先同意 Epic 的服务协议，系统自动处理失败了。
+                    </p>
+                    <div id="error-modal-steps" class="mt-4 space-y-3 text-sm text-slate-300">
+                        <p class="font-semibold text-white">请按以下步骤操作：</p>
+                        <ol class="list-decimal list-inside space-y-2">
+                            <li>打开 <a href="https://www.epicgames.com" target="_blank" class="text-blue-400 hover:text-blue-300 underline">Epic 官网</a> 并登录</li>
+                            <li>如果看到"服务协议"或"EULA"页面，点击"接受"按钮</li>
+                            <li>完成后回来重新点击"托管"按钮</li>
+                        </ol>
+                    </div>
+                </div>
+                <div class="flex flex-col gap-3">
+                    <a href="https://www.epicgames.com" target="_blank" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl transition-all flex items-center justify-center gap-2">
+                        <span>前往 Epic 官网</span>
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                    </a>
+                    <button onclick="closeErrorModal()" class="w-full bg-transparent border border-slate-700 hover:bg-slate-800 text-slate-400 font-bold py-3 rounded-xl transition-all">我知道了</button>
+                </div>
+            </div>
+        </div>
+
         <!-- 页脚 -->
         <footer class="w-full mt-8 pt-5 border-t border-slate-800 fade-in" style="animation-delay: 0.2s;">
             <div class="flex flex-col md:flex-row justify-between items-center gap-4">
@@ -603,6 +636,7 @@
     </div>
 
     <script>
+        {% raw %}
         // 初始化
         document.addEventListener('DOMContentLoaded', () => {
             initParticles();
@@ -775,18 +809,40 @@
                 const logDiv = document.getElementById('status-log');
                 const newLine = `\n> ${res.data.msg}`;
                 if (!logDiv.innerText.includes(res.data.msg)) logDiv.innerText = newLine + logDiv.innerText;
-                if (res.data.result === 'success_new') {
+
+                const result = res.data.result;
+
+                // ============================================================
+                // 🔥 错误类型处理
+                // 根据不同的 result 类型展示不同的弹窗
+                // ============================================================
+
+                // 成功领取新游戏
+                if (result === 'success_new') {
                     clearInterval(pollTimer);
                     await axios.post('/api/confirm_success', { email, password });
                     showModal(res.data.game_title || "Epic Free Game");
                     showToast(`🎉 成功领取!`, 'success', 4000);
                     resetUI(); fetchSystemStats();
-                } else if (res.data.result === 'success' || res.data.result === 'success_owned') {
+                }
+                // 验证成功或已在库中
+                else if (result === 'success' || result === 'success_owned') {
                     clearInterval(pollTimer);
                     await axios.post('/api/confirm_success', { email, password });
                     showToast('任务完成！', 'success');
                     resetUI(); fetchSystemStats();
-                } else if (res.data.result === 'fail') {
+                }
+                // ============================================================
+                // 🔥 错误类型：需要用户手动操作
+                // ============================================================
+                else if (result && result.startsWith('error_')) {
+                    clearInterval(pollTimer);
+                    const errorType = result.replace('error_', '');
+                    showErrorModal(errorType, res.data.hint);
+                    resetUI();
+                }
+                // 通用失败
+                else if (result === 'fail') {
                     clearInterval(pollTimer);
                     showToast('任务失败', 'error');
                     resetUI();
@@ -812,6 +868,99 @@
             document.getElementById('success-modal').classList.add('hidden');
             switchTab('query');
             if (document.getElementById('d_email').value) { document.getElementById('q_email').value = document.getElementById('d_email').value; doQuery(); }
+        }
+
+        // ============================================================
+        // 🔥 错误提示弹窗相关函数
+        // 根据不同的错误类型显示不同的提示内容
+        // ============================================================
+
+        // 错误类型配置：标题、描述、图标
+        const ERROR_CONFIGS = {
+            'eula_failed': {
+                title: '需要您帮忙操作一下',
+                desc: '这个账号需要先同意 Epic 的服务协议，系统自动处理失败了。',
+                showSteps: true,
+                icon: '⚠️',
+                iconBg: 'bg-amber-500/20'
+            },
+            'invalid_credentials': {
+                title: '密码错误',
+                desc: '您输入的邮箱或密码不正确，请检查后重新提交。',
+                showSteps: false,
+                icon: '❌',
+                iconBg: 'bg-red-500/20'
+            },
+            'account_locked': {
+                title: '账号被锁定',
+                desc: '该 Epic 账号已被锁定，请登录 Epic 官网解锁后再试。',
+                showSteps: true,
+                icon: '🔒',
+                iconBg: 'bg-red-500/20'
+            },
+            'captcha_failed': {
+                title: '验证码识别困难',
+                desc: '系统遇到了比较难的验证码，请稍后重试。如果多次失败，建议更换账号。',
+                showSteps: false,
+                icon: '🤖',
+                iconBg: 'bg-purple-500/20'
+            },
+            'login_timeout': {
+                title: '登录超时',
+                desc: '网络波动导致登录超时，请稍后重试。',
+                showSteps: false,
+                icon: '⏰',
+                iconBg: 'bg-blue-500/20'
+            },
+            'network_timeout': {
+                title: '网络连接超时',
+                desc: 'Epic 服务可能暂时不可用，请稍后重试。',
+                showSteps: false,
+                icon: '🌐',
+                iconBg: 'bg-blue-500/20'
+            },
+            'cookie_invalid': {
+                title: '登录已过期',
+                desc: '您的登录状态已过期，请重新托管账号。',
+                showSteps: false,
+                icon: '🔑',
+                iconBg: 'bg-amber-500/20'
+            },
+            'unknown': {
+                title: '未知错误',
+                desc: '系统遇到了未知错误，请联系管理员查看日志。',
+                showSteps: false,
+                icon: '❓',
+                iconBg: 'bg-slate-500/20'
+            }
+        };
+
+        function showErrorModal(errorType, hint) {
+            const config = ERROR_CONFIGS[errorType] || ERROR_CONFIGS['unknown'];
+
+            // 更新弹窗内容
+            document.getElementById('error-modal-title').textContent = config.title;
+            document.getElementById('error-modal-desc').textContent = hint || config.desc;
+
+            // 更新图标
+            const iconDiv = document.getElementById('error-modal-icon');
+            iconDiv.className = `w-16 h-16 ${config.iconBg} rounded-full flex items-center justify-center mx-auto mb-4`;
+            iconDiv.innerHTML = `<span class="text-3xl">${config.icon}</span>`;
+
+            // 显示/隐藏操作步骤
+            const stepsDiv = document.getElementById('error-modal-steps');
+            if (config.showSteps) {
+                stepsDiv.classList.remove('hidden');
+            } else {
+                stepsDiv.classList.add('hidden');
+            }
+
+            // 显示弹窗
+            document.getElementById('error-modal').classList.remove('hidden');
+        }
+
+        function closeErrorModal() {
+            document.getElementById('error-modal').classList.add('hidden');
         }
 
         // 资产查询 - 更大的卡片
@@ -851,6 +1000,7 @@
             } catch (e) { showToast('查询失败', 'error'); document.getElementById('skeleton-grid').classList.add('hidden'); }
             finally { btn.disabled = false; btn.innerText = "检索"; }
         }
+        {% endraw %}
     </script>
 </body>
 </html>

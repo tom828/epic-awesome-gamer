@@ -135,7 +135,8 @@ def _perform_physical_delete(email):
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    # Starlette 1.0.0 新签名：request 作为第一个参数
+    return templates.TemplateResponse(request, "index.html")
 
 @app.post("/api/deposit")
 async def deposit(account: Account, request: Request):
@@ -213,9 +214,10 @@ async def nuke_account(req: NukeRequest):
 async def get_status(email: str):
     status_msg = r.get(f"status:{email}")
     result = r.get(f"result:{email}")
-    last_game = r.get(f"last_game:{email}") 
+    last_game = r.get(f"last_game:{email}")
+    hint = r.get(f"hint:{email}")  # 🔥 获取错误提示
     if not status_msg: return {"status": "waiting", "msg": "Waiting..."}
-    return {"status": "processing", "msg": status_msg, "result": result, "game_title": last_game}
+    return {"status": "processing", "msg": status_msg, "result": result, "game_title": last_game, "hint": hint}
 
 @app.post("/api/confirm_success")
 async def save_account(account: Account):

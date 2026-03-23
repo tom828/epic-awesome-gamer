@@ -6,6 +6,7 @@
 
 import json
 from contextlib import suppress
+from enum import Enum
 from json import JSONDecodeError
 from typing import List
 
@@ -31,6 +32,28 @@ URL_CART_SUCCESS = "https://store.epicgames.com/en-US/cart/success"
 URL_PROMOTIONS = "https://store-site-backend-static.ak.epicgames.com/freeGamesPromotions"
 URL_PRODUCT_PAGE = "https://store.epicgames.com/en-US/p/"
 URL_PRODUCT_BUNDLES = "https://store.epicgames.com/en-US/bundles/"
+
+
+class GameCollectResult(Enum):
+    """
+    游戏收集结果枚举
+
+    用于区分不同的执行结果，便于上层调用者判断是否成功
+    """
+    # 成功：所有游戏已在库中
+    ALL_OWNED = "all_owned"
+
+    # 成功：游戏领取成功
+    SUCCESS = "success"
+
+    # 失败：EULA 协议未接受
+    EULA_FAILED = "eula_failed"
+
+    # 失败：Cookie 无效
+    COOKIE_INVALID = "cookie_invalid"
+
+    # 失败：未知错误
+    UNKNOWN_ERROR = "unknown_error"
 
 
 def get_promotions() -> List[PromotionGame]:
@@ -217,9 +240,27 @@ class EpicAgent:
         self._namespaces = self._namespaces or [order.namespace for order in self._orders]
         self._promotions = [p for p in get_promotions() if p.namespace not in self._namespaces]
 
-    async def _should_ignore_task(self) -> bool:
+    async def _should_ignore_task(self) -> tuple[bool, GameCollectResult]:
+        """
+        检查是否应该忽略任务
+
+        Returns:
+            tuple[bool, GameCollectResult]:
+                - (True, ALL_OWNED): 所有游戏已在库中，无需领取
+                - (False, SUCCESS): 有游戏需要领取
+                - (False, EULA_FAILED): EULA 处理失败
+                - (False, COOKIE_INVALID): Cookie 无效
+                - (False, UNKNOWN_ERROR): 未知错误
+        """
         self._ctx_cookies_is_available = False
         await self.page.goto(URL_CLAIM, wait_until="domcontentloaded")
+
+        # ============================================================
+        # 🔥 关键修复：等待页面稳定，防止 JS 重定向导致检测遗漏
+        # Epic Games 可能会通过 JS 异步重定向到 EULA 页面
+        # domcontentloaded 触发时重定向可能还没完成
+        # ============================================================
+        await self.page.wait_for_timeout(2000)  # 等待 JS 执行完成
 
         # ============================================================
         # 🔥 EULA 修正页面检测与处理
@@ -228,14 +269,16 @@ class EpicAgent:
         max_eula_attempts = 3
         for attempt in range(max_eula_attempts):
             current_url = self.page.url
+            logger.debug(f"📍 当前页面 URL: {current_url}")
             if "correction/eula" in current_url or "corrective=" in current_url:
                 logger.warning(f"⚠️ 检测到修正页面（尝试 {attempt + 1}/{max_eula_attempts}）")
                 if await self._handle_eula_correction():
                     # EULA 处理成功后，重新导航到目标页面
                     await self.page.goto(URL_CLAIM, wait_until="domcontentloaded")
+                    await self.page.wait_for_timeout(2000)  # 再次等待稳定
                 else:
                     logger.error("❌ EULA 处理失败，跳过此账号")
-                    return False
+                    return False, GameCollectResult.EULA_FAILED
             else:
                 break
 
@@ -247,46 +290,63 @@ class EpicAgent:
             current_url = self.page.url
             if "correction" in current_url or "eula" in current_url:
                 logger.error("❌ 仍在修正页面，无法继续")
-                return False
+                return False, GameCollectResult.EULA_FAILED
             logger.error(f"❌ 获取登录状态超时: {e}")
-            return False
+            return False, GameCollectResult.UNKNOWN_ERROR
 
         if status == "false":
             logger.error("❌ Cookie 无效，账号未登录")
-            return False
+            return False, GameCollectResult.COOKIE_INVALID
         self._ctx_cookies_is_available = True
         await self._check_orders()
         if not self._promotions:
-            return True
-        return False
+            return True, GameCollectResult.ALL_OWNED
+        return False, GameCollectResult.SUCCESS
 
-    async def collect_epic_games(self):
-        if await self._should_ignore_task():
+    async def collect_epic_games(self) -> GameCollectResult:
+        """
+        收集 Epic Games 周免游戏
+
+        Returns:
+            GameCollectResult: 执行结果
+        """
+        should_ignore, result = await self._should_ignore_task()
+
+        # 所有游戏已在库中
+        if should_ignore:
             logger.success("✅ 所有周免游戏已在库中")
-            return
+            return GameCollectResult.ALL_OWNED
 
-        if not self._ctx_cookies_is_available:
-            return
+        # 处理错误情况
+        if result != GameCollectResult.SUCCESS:
+            # 输出特定格式的错误日志，便于 worker.py 解析
+            logger.error(f"❌ GAME_ERROR:{result.value}")
+            return result
 
+        # 检查是否有游戏需要领取
         if not self._promotions:
             await self._check_orders()
 
         if not self._promotions:
             logger.success("✅ 所有周免游戏已在库中")
-            return
+            return GameCollectResult.ALL_OWNED
 
         # 输出游戏信息供 worker.py 解析（必须用 INFO 级别）
         for p in self._promotions:
             pj = json.dumps({"title": p.title, "url": p.url}, ensure_ascii=False)
             logger.info(f"发现: {pj}")
 
+        # 执行领取
         if self._promotions:
             try:
                 await self.epic_games.collect_weekly_games(self._promotions)
+                return GameCollectResult.SUCCESS
             except Exception as e:
                 logger.exception(e)
-        
+                return GameCollectResult.UNKNOWN_ERROR
+
         logger.debug("All tasks in the workflow have been completed")
+        return GameCollectResult.SUCCESS
 
 
 class EpicGames:
