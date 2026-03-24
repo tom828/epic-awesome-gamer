@@ -370,9 +370,44 @@
         .footer-icon:hover {
             transform: scale(1.2);
         }
+
+        /* Tailwind CSS 加载前的 SVG 尺寸预设，防止闪烁 */
+        svg.w-4.h-4 { width: 16px !important; height: 16px !important; }
+        svg.w-6.h-6 { width: 24px !important; height: 24px !important; }
+        svg.w-7.h-7 { width: 28px !important; height: 28px !important; }
+        svg.w-8.h-8 { width: 32px !important; height: 32px !important; }
+        .w-12.h-12 { width: 48px !important; height: 48px !important; }
+        .stat-icon { width: 44px !important; height: 44px !important; }
+
+        /* 页面加载遮罩 - 防止内容闪烁 */
+        #page-loader {
+            position: fixed;
+            inset: 0;
+            background: #0f172a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 99999;
+            transition: opacity 0.3s ease-out;
+        }
+        #page-loader.fade-out {
+            opacity: 0;
+            pointer-events: none;
+        }
+        #page-loader .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(59, 130, 246, 0.3);
+            border-top-color: #3b82f6;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
+    <!-- 页面加载遮罩 -->
+    <div id="page-loader"><div class="spinner"></div></div>
 
     <canvas id="particles-canvas"></canvas>
     <div id="toast-container"></div>
@@ -394,8 +429,8 @@
         <!-- 头部 -->
         <div class="w-full flex flex-col md:flex-row justify-between items-center mb-5 fade-in gap-4" style="animation-delay: 0.1s;">
             <div class="flex items-center gap-4">
-                <div class="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/30">
-                    <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                <div class="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/30" style="width:48px;height:48px;flex-shrink:0">
+                    <svg class="w-7 h-7 text-white" style="width:28px;height:28px;flex-shrink:0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
                 </div>
                 <div>
                     <h1 class="text-2xl font-black tracking-tight text-white">Epic <span class="text-blue-400">自动驾驶</span></h1>
@@ -415,8 +450,8 @@
         <div class="w-full mb-5 fade-in" style="animation-delay: 0.12s;">
             <div class="stats-bar flex-wrap justify-center md:justify-start">
                 <div class="stat-item">
-                    <div class="stat-icon bg-blue-500/20">
-                        <svg class="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                    <div class="stat-icon bg-blue-500/20" style="width:44px;height:44px;flex-shrink:0">
+                        <svg class="w-6 h-6 text-blue-400" style="width:24px;height:24px;flex-shrink:0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
                     </div>
                     <div>
                         <p class="stat-label">托管账号</p>
@@ -424,8 +459,8 @@
                     </div>
                 </div>
                 <div class="stat-item">
-                    <div class="stat-icon bg-green-500/20">
-                        <svg class="w-6 h-6 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <div class="stat-icon bg-green-500/20" style="width:44px;height:44px;flex-shrink:0">
+                        <svg class="w-6 h-6 text-green-400" style="width:24px;height:24px;flex-shrink:0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                     </div>
                     <div>
                         <p class="stat-label">今日领取</p>
@@ -433,8 +468,8 @@
                     </div>
                 </div>
                 <div class="stat-item">
-                    <div class="stat-icon bg-purple-500/20">
-                        <svg class="w-6 h-6 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path></svg>
+                    <div class="stat-icon bg-purple-500/20" style="width:44px;height:44px;flex-shrink:0">
+                        <svg class="w-6 h-6 text-purple-400" style="width:24px;height:24px;flex-shrink:0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path></svg>
                     </div>
                     <div>
                         <p class="stat-label">累计领取</p>
@@ -442,8 +477,8 @@
                     </div>
                 </div>
                 <div class="stat-item">
-                    <div class="stat-icon bg-amber-500/20">
-                        <svg class="w-6 h-6 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <div class="stat-icon bg-amber-500/20" style="width:44px;height:44px;flex-shrink:0">
+                        <svg class="w-6 h-6 text-amber-400" style="width:24px;height:24px;flex-shrink:0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                     </div>
                     <div>
                         <p class="stat-label">队列任务</p>
@@ -646,6 +681,15 @@
             loadRememberedEmail();
             fetchSystemStats();
             setInterval(fetchSystemStats, 30000);
+
+            // 隐藏加载遮罩（延迟确保 Tailwind 已加载）
+            setTimeout(() => {
+                const loader = document.getElementById('page-loader');
+                if (loader) {
+                    loader.classList.add('fade-out');
+                    setTimeout(() => loader.remove(), 300);
+                }
+            }, 100);
         });
 
         // 粒子背景
